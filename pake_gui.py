@@ -4,38 +4,136 @@ import subprocess
 import os
 import threading
 import sys
+import json
+import glob
+import datetime
 
-class PakeGUI:
-    def __init__(self, root):
-        self.root = root
-        self.root.title("Pake CLI Builder (Windows)")
-        self.root.geometry("600x550")
+DATA_FILE = "pake_history.json"
+
+class PakeGUI(tk.Tk):
+    def __init__(self):
+        super().__init__()
+        self.title("Pake CLI Management Studio")
+        self.geometry("900x650")
         
-        self.create_widgets()
+        # Configure style
+        self.style = ttk.Style()
+        self.style.theme_use('clam')
+        self.style.configure("TFrame", background="#f0f0f0")
+        self.style.configure("Sidebar.TFrame", background="#2d2d2d")
+        self.style.configure("Sidebar.TButton", background="#2d2d2d", foreground="white", borderwidth=0, anchor="w", padding=10)
+        self.style.map("Sidebar.TButton", background=[("active", "#404040")])
+        self.style.configure("Title.TLabel", font=("Segoe UI", 16, "bold"), background="#f0f0f0")
+        self.style.configure("TLabel", background="#f0f0f0")
+        self.style.configure("TCheckbutton", background="#f0f0f0")
+
+        self.history_data = self.load_history()
+
+        self.create_layout()
+        self.show_builder()
+
+    def load_history(self):
+        if os.path.exists(DATA_FILE):
+            try:
+                with open(DATA_FILE, "r") as f:
+                    return json.load(f)
+            except:
+                return []
+        return []
+
+    def save_history(self, entry):
+        # Check if identical entry exists
+        for item in self.history_data:
+            if item.get("name") == entry.get("name") and item.get("url") == entry.get("url"):
+                item.update(entry)
+                break
+        else:
+            self.history_data.insert(0, entry)
         
-    def create_widgets(self):
-        main_frame = ttk.Frame(self.root, padding="20")
-        main_frame.pack(fill=tk.BOTH, expand=True)
+        with open(DATA_FILE, "w") as f:
+            json.dump(self.history_data, f, indent=2)
         
-        # URL
-        ttk.Label(main_frame, text="Website URL (Required):").grid(row=0, column=0, sticky=tk.W, pady=5)
+        # Update history view if active
+        if hasattr(self, 'history_view'):
+            self.history_view.refresh()
+
+    def create_layout(self):
+        # Sidebar
+        self.sidebar = ttk.Frame(self, style="Sidebar.TFrame", width=200)
+        self.sidebar.pack(side=tk.LEFT, fill=tk.Y)
+        self.sidebar.pack_propagate(False)
+
+        ttk.Label(self.sidebar, text="PAKE STUDIO", background="#2d2d2d", foreground="white", font=("Segoe UI", 14, "bold"), padding=20).pack(fill=tk.X)
+
+        self.btn_builder = ttk.Button(self.sidebar, text="🔨  App Builder", style="Sidebar.TButton", command=self.show_builder)
+        self.btn_builder.pack(fill=tk.X, pady=2)
+
+        self.btn_builds = ttk.Button(self.sidebar, text="📦  Builds Manager", style="Sidebar.TButton", command=self.show_builds)
+        self.btn_builds.pack(fill=tk.X, pady=2)
+
+        self.btn_history = ttk.Button(self.sidebar, text="📚  My Apps (History)", style="Sidebar.TButton", command=self.show_history)
+        self.btn_history.pack(fill=tk.X, pady=2)
+
+        # Content Area
+        self.content_area = ttk.Frame(self, style="TFrame")
+        self.content_area.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+
+    def clear_content(self):
+        for widget in self.content_area.winfo_children():
+            widget.destroy()
+
+    def show_builder(self):
+        self.clear_content()
+        BuilderView(self.content_area, self)
+
+    def show_builds(self):
+        self.clear_content()
+        BuildsView(self.content_area, self)
+
+    def show_history(self):
+        self.clear_content()
+        self.history_view = HistoryView(self.content_area, self)
+
+class BuilderView:
+    def __init__(self, parent, app):
+        self.parent = parent
+        self.app = app
+        
+        header = ttk.Label(parent, text="Create New App", style="Title.TLabel")
+        header.pack(anchor=tk.W, padx=20, pady=20)
+
+        container = ttk.Frame(parent)
+        container.pack(fill=tk.BOTH, expand=True, padx=20)
+
+        # Form Grid
+        grid_frame = ttk.Frame(container)
+        grid_frame.pack(fill=tk.X, pady=10)
+
+        # Row 0: URL
+        ttk.Label(grid_frame, text="Website URL (Required):").grid(row=0, column=0, sticky=tk.W, pady=5)
         self.url_var = tk.StringVar()
-        ttk.Entry(main_frame, textvariable=self.url_var, width=50).grid(row=0, column=1, columnspan=2, sticky=tk.W, pady=5)
-        
-        # Name
-        ttk.Label(main_frame, text="App Name (Required):").grid(row=1, column=0, sticky=tk.W, pady=5)
+        ttk.Entry(grid_frame, textvariable=self.url_var, width=50).grid(row=0, column=1, columnspan=2, sticky=tk.W, pady=5)
+
+        # Row 1: Name
+        ttk.Label(grid_frame, text="App Name (Required):").grid(row=1, column=0, sticky=tk.W, pady=5)
         self.name_var = tk.StringVar()
-        ttk.Entry(main_frame, textvariable=self.name_var, width=50).grid(row=1, column=1, columnspan=2, sticky=tk.W, pady=5)
-        
-        # Icon
-        ttk.Label(main_frame, text="Icon (URL or Path):").grid(row=2, column=0, sticky=tk.W, pady=5)
+        ttk.Entry(grid_frame, textvariable=self.name_var, width=50).grid(row=1, column=1, columnspan=2, sticky=tk.W, pady=5)
+
+        # Row 2: Icon
+        ttk.Label(grid_frame, text="Icon (URL or Path):").grid(row=2, column=0, sticky=tk.W, pady=5)
         self.icon_var = tk.StringVar()
-        ttk.Entry(main_frame, textvariable=self.icon_var, width=40).grid(row=2, column=1, sticky=tk.W, pady=5)
-        ttk.Button(main_frame, text="Browse", command=self.browse_icon).grid(row=2, column=2, sticky=tk.W, padx=5)
-        
-        # Dimensions
-        dim_frame = ttk.Frame(main_frame)
-        dim_frame.grid(row=3, column=0, columnspan=3, sticky=tk.W, pady=10)
+        ttk.Entry(grid_frame, textvariable=self.icon_var, width=40).grid(row=2, column=1, sticky=tk.W, pady=5)
+        ttk.Button(grid_frame, text="Browse", command=self.browse_icon).grid(row=2, column=2, sticky=tk.W, padx=5)
+
+        # Row 3: ID (New Feature)
+        ttk.Label(grid_frame, text="Bundle ID (Optional, for separation):").grid(row=3, column=0, sticky=tk.W, pady=5)
+        self.id_var = tk.StringVar()
+        ttk.Entry(grid_frame, textvariable=self.id_var, width=50).grid(row=3, column=1, columnspan=2, sticky=tk.W, pady=5)
+        ttk.Label(grid_frame, text="e.g., com.pake.myworkapp. Leave empty for default.", font=("Segoe UI", 8)).grid(row=4, column=1, columnspan=2, sticky=tk.W, pady=(0,5))
+
+        # Row 4: Dimensions
+        dim_frame = ttk.Frame(grid_frame)
+        dim_frame.grid(row=5, column=0, columnspan=3, sticky=tk.W, pady=10)
         
         ttk.Label(dim_frame, text="Width:").pack(side=tk.LEFT)
         self.width_var = tk.StringVar(value="1200")
@@ -44,31 +142,31 @@ class PakeGUI:
         ttk.Label(dim_frame, text="Height:").pack(side=tk.LEFT, padx=(15, 0))
         self.height_var = tk.StringVar(value="780")
         ttk.Entry(dim_frame, textvariable=self.height_var, width=10).pack(side=tk.LEFT, padx=5)
+
+        # Row 5: Options
+        opts_frame = ttk.Frame(grid_frame)
+        opts_frame.grid(row=6, column=0, columnspan=3, sticky=tk.W, pady=10)
         
-        # Options
         self.fullscreen_var = tk.BooleanVar()
-        ttk.Checkbutton(main_frame, text="Start in Fullscreen", variable=self.fullscreen_var).grid(row=4, column=0, columnspan=3, sticky=tk.W, pady=2)
+        ttk.Checkbutton(opts_frame, text="Fullscreen", variable=self.fullscreen_var).pack(side=tk.LEFT, padx=(0, 15))
         
         self.hide_title_bar_var = tk.BooleanVar()
-        ttk.Checkbutton(main_frame, text="Hide Title Bar", variable=self.hide_title_bar_var).grid(row=5, column=0, columnspan=3, sticky=tk.W, pady=2)
-        
-        # Build Button
-        self.build_btn = ttk.Button(main_frame, text="Build App", command=self.start_build)
-        self.build_btn.grid(row=6, column=0, columnspan=2, pady=20, sticky=tk.E)
+        ttk.Checkbutton(opts_frame, text="Hide Title Bar", variable=self.hide_title_bar_var).pack(side=tk.LEFT)
 
-        # Install Dependencies Button
-        self.install_btn = ttk.Button(main_frame, text="Install Dependencies", command=self.start_install)
-        self.install_btn.grid(row=6, column=2, pady=20, sticky=tk.W, padx=5)
+        # Actions
+        btn_frame = ttk.Frame(parent)
+        btn_frame.pack(fill=tk.X, padx=20)
         
-        # Output Log
-        ttk.Label(main_frame, text="Output Log:").grid(row=7, column=0, sticky=tk.W)
-        self.log_text = tk.Text(main_frame, height=10, width=70, state=tk.DISABLED)
-        self.log_text.grid(row=8, column=0, columnspan=3, pady=5)
+        self.build_btn = ttk.Button(btn_frame, text="Build App", command=self.start_build)
+        self.build_btn.pack(side=tk.RIGHT, pady=10)
         
-        # Scrollbar for log
-        scrollbar = ttk.Scrollbar(main_frame, orient="vertical", command=self.log_text.yview)
-        scrollbar.grid(row=8, column=3, sticky="ns")
-        self.log_text.configure(yscrollcommand=scrollbar.set)
+        self.install_btn = ttk.Button(btn_frame, text="Install Dependencies", command=self.start_install)
+        self.install_btn.pack(side=tk.RIGHT, padx=10, pady=10)
+
+        # Log
+        ttk.Label(parent, text="Output Log:").pack(anchor=tk.W, padx=20)
+        self.log_text = tk.Text(parent, height=12, state=tk.DISABLED)
+        self.log_text.pack(fill=tk.BOTH, expand=True, padx=20, pady=(5, 20))
 
     def browse_icon(self):
         filename = filedialog.askopenfilename(filetypes=[("Image files", "*.png;*.jpg;*.jpeg;*.ico;*.icns")])
@@ -82,12 +180,10 @@ class PakeGUI:
         self.log_text.config(state=tk.DISABLED)
 
     def start_install(self):
-        self.install_btn.config(state=tk.DISABLED)
-        self.build_btn.config(state=tk.DISABLED)
+        self.toggle_buttons(False)
         self.log_text.config(state=tk.NORMAL)
         self.log_text.delete(1.0, tk.END)
         self.log_text.config(state=tk.DISABLED)
-        
         threading.Thread(target=self.run_install, daemon=True).start()
 
     def run_install(self):
@@ -97,33 +193,12 @@ class PakeGUI:
             if sys.platform == "win32":
                 cmd = ["cmd", "/c"] + cmd
             
-            process = subprocess.Popen(
-                cmd,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                text=True,
-                bufsize=1,
-                universal_newlines=True
-            )
-
-            for line in process.stdout:
-                self.log(line.strip())
-
-            process.wait()
-            
-            if process.returncode == 0:
-                self.log("Dependencies installed successfully!")
-                messagebox.showinfo("Success", "Dependencies installed successfully!")
-            else:
-                self.log(f"Installation failed with return code {process.returncode}")
-                messagebox.showerror("Error", "Installation failed!")
-
+            self.run_process(cmd)
+            self.log("Dependencies installed!")
         except Exception as e:
-            self.log(f"An error occurred: {str(e)}")
-            messagebox.showerror("Error", f"An error occurred: {str(e)}")
+            self.log(f"Error: {e}")
         finally:
-            self.root.after(0, lambda: self.install_btn.config(state=tk.NORMAL))
-            self.root.after(0, lambda: self.build_btn.config(state=tk.NORMAL))
+            self.toggle_buttons(True)
 
     def start_build(self):
         url = self.url_var.get().strip()
@@ -133,8 +208,7 @@ class PakeGUI:
             messagebox.showerror("Error", "URL and Name are required!")
             return
             
-        self.build_btn.config(state=tk.DISABLED)
-        self.install_btn.config(state=tk.DISABLED)
+        self.toggle_buttons(False)
         self.log_text.config(state=tk.NORMAL)
         self.log_text.delete(1.0, tk.END)
         self.log_text.config(state=tk.DISABLED)
@@ -143,37 +217,29 @@ class PakeGUI:
 
     def run_build(self, url, name):
         try:
-            # Check for node_modules
+             # Check for node_modules
             if not os.path.exists(os.path.join(os.getcwd(), "node_modules")):
-                self.log("Error: node_modules not found. Please click 'Install Dependencies' first.")
-                messagebox.showerror("Error", "Dependencies not installed. Please click 'Install Dependencies' first.")
-                return
+                self.log("Error: node_modules not found. Building CLI might fail. Consider installing dependencies first.")
 
-            # Check if dist/cli.js exists
+            # Check/Build CLI
             cli_path = os.path.join(os.getcwd(), "dist", "cli.js")
             if not os.path.exists(cli_path):
-                self.log("Error: dist/cli.js not found. Running 'pnpm run cli:build' first...")
-                # Try to build the CLI first
+                self.log("Building CLI...")
                 build_cmd = ["pnpm", "run", "cli:build"]
                 if sys.platform == "win32":
                     build_cmd = ["cmd", "/c"] + build_cmd
-                
-                proc = subprocess.Popen(build_cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
-                for line in proc.stdout:
-                    self.log(line.strip())
-                proc.wait()
-                
-                if proc.returncode != 0:
-                    self.log("Failed to build CLI.")
-                    self.root.after(0, lambda: self.build_btn.config(state=tk.NORMAL))
-                    self.root.after(0, lambda: self.install_btn.config(state=tk.NORMAL))
-                    return
+                if self.run_process(build_cmd) != 0:
+                     self.log("Failed to build CLI.")
+                     return
 
-            # Construct command
+            # Construct Command
             cmd = ["node", "dist/cli.js", url, "--name", name]
             
             if self.icon_var.get().strip():
                 cmd.extend(["--icon", self.icon_var.get().strip()])
+            
+            if self.id_var.get().strip():
+                cmd.extend(["--identifier", self.id_var.get().strip()])
                 
             if self.width_var.get().strip():
                 cmd.extend(["--width", self.width_var.get().strip()])
@@ -187,43 +253,127 @@ class PakeGUI:
             if self.hide_title_bar_var.get():
                 cmd.append("--hide-title-bar")
 
-            self.log(f"Running command: {' '.join(cmd)}")
+            self.log(f"Executing: {' '.join(cmd)}")
             
-            # Run command
-            if sys.platform == "win32":
-                # Use shell=True for Windows to find node in path easily, or just rely on subprocess
-                # But for node it should be fine.
-                pass
-
-            process = subprocess.Popen(
-                cmd,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                text=True,
-                bufsize=1,
-                universal_newlines=True
-            )
-
-            for line in process.stdout:
-                self.log(line.strip())
-
-            process.wait()
+            result_code = self.run_process(cmd)
             
-            if process.returncode == 0:
-                self.log("Build completed successfully!")
+            if result_code == 0:
+                self.log("Build Success!")
+                self.app.save_history({
+                    "name": name,
+                    "url": url,
+                    "identifier": self.id_var.get().strip() or "Default",
+                    "date": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                })
                 messagebox.showinfo("Success", "Build completed successfully!")
             else:
-                self.log(f"Build failed with return code {process.returncode}")
+                self.log("Build Failed.")
                 messagebox.showerror("Error", "Build failed!")
 
         except Exception as e:
-            self.log(f"An error occurred: {str(e)}")
-            messagebox.showerror("Error", f"An error occurred: {str(e)}")
+            self.log(f"Exception: {str(e)}")
         finally:
-            self.root.after(0, lambda: self.build_btn.config(state=tk.NORMAL))
-            self.root.after(0, lambda: self.install_btn.config(state=tk.NORMAL))
+            self.toggle_buttons(True)
+
+    def run_process(self, cmd):
+        process = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            bufsize=1,
+            universal_newlines=True
+        )
+        for line in process.stdout:
+            self.log(line.strip())
+        process.wait()
+        return process.returncode
+
+    def toggle_buttons(self, state):
+        s = tk.NORMAL if state else tk.DISABLED
+        self.build_btn.config(state=s)
+        self.install_btn.config(state=s)
+
+class BuildsView:
+    def __init__(self, parent, app):
+        self.parent = parent
+        
+        header = ttk.Label(parent, text="Available Builds", style="Title.TLabel")
+        header.pack(anchor=tk.W, padx=20, pady=20)
+        
+        self.tree = ttk.Treeview(parent, columns=("Path"), show="headings")
+        self.tree.heading("Path", text="File Location")
+        self.tree.pack(fill=tk.BOTH, expand=True, padx=20, pady=10)
+        
+        # Scrollbar
+        scrollbar = ttk.Scrollbar(parent, orient="vertical", command=self.tree.yview)
+        scrollbar.place(relx=0.97, rely=0.2, relheight=0.7)
+        self.tree.configure(yscrollcommand=scrollbar.set)
+        
+        btn_frame = ttk.Frame(parent)
+        btn_frame.pack(fill=tk.X, padx=20, pady=20)
+        
+        ttk.Button(btn_frame, text="Open Folder", command=self.open_folder).pack(side=tk.LEFT)
+        ttk.Button(btn_frame, text="Refresh", command=self.refresh).pack(side=tk.RIGHT)
+        
+        self.refresh()
+
+    def refresh(self):
+        for item in self.tree.get_children():
+            self.tree.delete(item)
+            
+        # Common locations for Tauri builds
+        patterns = [
+            "src-tauri/target/release/bundle/msi/*.msi",
+            "src-tauri/target/release/bundle/nsis/*.exe",
+            "src-tauri/target/release/*.exe" 
+        ]
+        
+        found = []
+        for p in patterns:
+            found.extend(glob.glob(os.path.join(os.getcwd(), p)))
+            
+        for f in found:
+            self.tree.insert("", tk.END, values=(f,))
+
+    def open_folder(self):
+        selected = self.tree.selection()
+        if selected:
+            path = self.tree.item(selected[0])['values'][0]
+            folder = os.path.dirname(path)
+            os.startfile(folder)
+
+class HistoryView:
+    def __init__(self, parent, app):
+        self.parent = parent
+        self.app = app
+        
+        header = ttk.Label(parent, text="My Managed Apps", style="Title.TLabel")
+        header.pack(anchor=tk.W, padx=20, pady=20)
+        
+        # Table
+        cols = ("Name", "URL", "Date", "Identifier")
+        self.tree = ttk.Treeview(parent, columns=cols, show="headings")
+        for col in cols:
+            self.tree.heading(col, text=col)
+            self.tree.column(col, width=150)
+            
+        self.tree.pack(fill=tk.BOTH, expand=True, padx=20, pady=10)
+        
+        self.refresh()
+
+    def refresh(self):
+        for item in self.tree.get_children():
+            self.tree.delete(item)
+            
+        for entry in self.app.history_data:
+            self.tree.insert("", tk.END, values=(
+                entry.get("name"), 
+                entry.get("url"), 
+                entry.get("date"),
+                entry.get("identifier")
+            ))
 
 if __name__ == "__main__":
-    root = tk.Tk()
-    app = PakeGUI(root)
-    root.mainloop()
+    app = PakeGUI()
+    app.mainloop()

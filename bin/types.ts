@@ -6,6 +6,9 @@ export interface PakeCliOptions {
   // Application name
   name?: string;
 
+  // Application identifier (Bundle ID)
+  identifier?: string;
+
   // Window title (supports Chinese characters)
   title?: string;
 

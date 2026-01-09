@@ -77,7 +77,7 @@ export default async function handleOptions(
   const appOptions: PakeAppOptions = {
     ...options,
     name,
-    identifier: getIdentifier(url),
+    identifier: options.identifier || getIdentifier(url),
   };
 
   const iconPath = await handleIcon(appOptions, url);
